@@ -6,14 +6,12 @@ import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
-import android.os.Looper;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.provider.Settings;
 import android.support.annotation.FloatRange;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.annotation.UiThread;
 import android.support.annotation.VisibleForTesting;
 import android.support.v7.widget.AppCompatImageView;
 import android.text.TextUtils;
@@ -35,9 +33,10 @@ import java.util.Map;
  * 2) Programatically: {@link #setAnimation(String)}, {@link #setComposition(LottieComposition)},
  * or {@link #setAnimation(JSONObject)}.
  * <p>
- * You can also set a default cache strategy with {@link R.attr#lottie_cacheStrategy}.
+ * You can set a default cache strategy with {@link R.attr#lottie_cacheStrategy}.
  * <p>
- * You may manually set the progress of the animation with {@link #setProgress(float)}
+ * You can manually set the progress of the animation with {@link #setProgress(float)} or
+ * {@link R.attr#lottie_progress}
  */
 public class LottieAnimationView extends AppCompatImageView {
   private static final String TAG = LottieAnimationView.class.getSimpleName();
@@ -101,6 +100,7 @@ public class LottieAnimationView extends AppCompatImageView {
     }
     lottieDrawable.loop(ta.getBoolean(R.styleable.LottieAnimationView_lottie_loop, false));
     setImageAssetsFolder(ta.getString(R.styleable.LottieAnimationView_lottie_imageAssetsFolder));
+    setProgress(ta.getFloat(R.styleable.LottieAnimationView_lottie_progress, 0));
     int cacheStrategy = ta.getInt(
         R.styleable.LottieAnimationView_lottie_cacheStrategy,
         CacheStrategy.None.ordinal());
@@ -117,10 +117,27 @@ public class LottieAnimationView extends AppCompatImageView {
     }
   }
 
+  @Override public void setImageResource(int resId) {
+    super.setImageResource(resId);
+    recycleBitmaps();
+  }
+
+  @Override public void setImageDrawable(Drawable drawable) {
+    if (drawable != lottieDrawable) {
+      recycleBitmaps();
+    }
+    super.setImageDrawable(drawable);
+  }
+
   @Override public void invalidateDrawable(Drawable dr) {
-    // We always want to invalidate the root drawable to it redraws the whole drawable.
-    // Eventually it would be great to be able to invalidate just the changed region.
-    super.invalidateDrawable(lottieDrawable);
+    if (getDrawable() == lottieDrawable) {
+      // We always want to invalidate the root drawable to it redraws the whole drawable.
+      // Eventually it would be great to be able to invalidate just the changed region.
+      super.invalidateDrawable(lottieDrawable);
+    } else {
+      // Otherwise work as regular ImageView
+      super.invalidateDrawable(dr);
+    }
   }
 
   @Override protected Parcelable onSaveInstanceState() {
@@ -158,10 +175,7 @@ public class LottieAnimationView extends AppCompatImageView {
     super.onDetachedFromWindow();
   }
 
-  @UiThread @VisibleForTesting void recycleBitmaps() {
-    if (Looper.myLooper() != Looper.getMainLooper()) {
-      throw new IllegalStateException("This must be called from the main thread.");
-    }
+  @VisibleForTesting void recycleBitmaps() {
     lottieDrawable.recycleBitmaps();
   }
 
@@ -252,6 +266,21 @@ public class LottieAnimationView extends AppCompatImageView {
       return;
     }
 
+    int screenWidth = Utils.getScreenWidth(getContext());
+    int screenHeight = Utils.getScreenHeight(getContext());
+    int compWidth = composition.getBounds().width();
+    int compHeight = composition.getBounds().height();
+    if (compWidth > screenWidth ||
+        compHeight > screenHeight) {
+      float xScale = screenWidth / (float) compWidth;
+      float yScale = screenHeight / (float) compHeight;
+      setScale(Math.min(xScale, yScale));
+      Log.w(L.TAG, String.format(
+          "Composition larger than the screen %dx%d vs %dx%d. Scaling down.",
+          compWidth, compHeight, screenWidth, screenHeight));
+    }
+
+
     // If you set a different composition on the view, the bounds will not update unless
     // the drawable is different than the original.
     setImageDrawable(null);
@@ -318,12 +347,35 @@ public class LottieAnimationView extends AppCompatImageView {
     lottieDrawable.playAnimation();
   }
 
+  public void resumeAnimation() {
+    lottieDrawable.resumeAnimation();
+  }
+
   @SuppressWarnings("unused") public void reverseAnimation() {
     lottieDrawable.reverseAnimation();
   }
 
+  @SuppressWarnings("unused") public void resumeReverseAnimation() {
+    lottieDrawable.resumeReverseAnimation();
+  }
+
   @SuppressWarnings("unused") public void setSpeed(float speed) {
     lottieDrawable.setSpeed(speed);
+  }
+
+  /**
+   * Use this if you can't bundle images with your app. This may be useful if you download the
+   * animations from the network or have the images saved to an SD Card. In that case, Lottie
+   * will defer the loading of the bitmap to this delegate.
+   */
+  public void setImageAssetDelegate(ImageAssetDelegate assetDelegate) {
+    lottieDrawable.setImageAssetDelegate(assetDelegate);
+  }
+
+  void setScale(float scale) {
+    lottieDrawable.setScale(scale);
+    setImageDrawable(null);
+    setImageDrawable(lottieDrawable);
   }
 
   public void cancelAnimation() {

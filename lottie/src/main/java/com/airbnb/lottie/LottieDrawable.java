@@ -5,7 +5,6 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
-import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -29,10 +28,11 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
   private LottieComposition composition;
   private final ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
   private float speed = 1f;
+  private float scale = 1f;
 
-  private final CanvasPool canvasPool = new CanvasPool();
   @Nullable private ImageAssetBitmapManager imageAssetBitmapManager;
   @Nullable private String imageAssetsFolder;
+  @Nullable private ImageAssetDelegate imageAssetDelegate;
   private boolean playAnimationWhenLayerAdded;
   private boolean reverseAnimationWhenLayerAdded;
   private boolean systemAnimationsAreDisabled;
@@ -57,7 +57,7 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
   /**
    * Returns whether or not any layers in this composition has masks.
    */
-  @SuppressWarnings("unused") public boolean hasMasks() {
+  @SuppressWarnings({"unused", "WeakerAccess"}) public boolean hasMasks() {
     for (AnimatableLayer layer : layers) {
       if (!(layer instanceof LayerView)) {
         continue;
@@ -72,7 +72,7 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
   /**
    * Returns whether or not any layers in this composition has a matte layer.
    */
-  @SuppressWarnings("unused") public boolean hasMatte() {
+  @SuppressWarnings({"unused", "WeakerAccess"}) public boolean hasMatte() {
     for (AnimatableLayer layer : layers) {
       if (!(layer instanceof LayerView)) {
         continue;
@@ -104,12 +104,11 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
   /**
    * If you have image assets and use {@link LottieDrawable} directly, you must call this yourself.
    *
-   * Calling {@link #recycleBitmaps()} doesn't have to be final and {@link LottieDrawable}
+   * Calling recycleBitmaps() doesn't have to be final and {@link LottieDrawable}
    * will recreate the bitmaps if needed but they will leak if you don't recycle them.
    *
    */
   @SuppressWarnings("WeakerAccess") public void recycleBitmaps() {
-    canvasPool.recycleBitmaps();
     if (imageAssetBitmapManager != null) {
       imageAssetBitmapManager.recycleBitmaps();
     }
@@ -118,7 +117,7 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
   /**
    * @return True if the composition is different from the previously set composition, false otherwise.
    */
-  boolean setComposition(LottieComposition composition) {
+  @SuppressWarnings("WeakerAccess") public boolean setComposition(LottieComposition composition) {
     if (getCallback() == null) {
       throw new IllegalStateException(
           "You or your view must set a Drawable.Callback before setting the composition. This " +
@@ -134,7 +133,8 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
     clearComposition();
     this.composition = composition;
     setSpeed(speed);
-    setBounds(0, 0, composition.getBounds().width(), composition.getBounds().height());
+    setScale(1f);
+    updateBounds();
     buildLayersForComposition(composition);
 
     setProgress(getProgress());
@@ -157,7 +157,7 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
     for (int i = composition.getLayers().size() - 1; i >= 0; i--) {
       Layer layer = composition.getLayers().get(i);
       LayerView layerView;
-      layerView = new LayerView(layer, composition, this, canvasPool);
+      layerView = new LayerView(layer, composition, this);
       layerMap.put(layerView.getId(), layerView);
       if (mattedLayer != null) {
         mattedLayer.setMatteLayer(layerView);
@@ -198,18 +198,11 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
     if (composition == null) {
       return;
     }
-    Rect bounds = getBounds();
-    Rect compBounds = composition.getBounds();
+
     int saveCount = canvas.save();
-    if (!bounds.equals(compBounds)) {
-      float scaleX = bounds.width() / (float) compBounds.width();
-      float scaleY = bounds.height() / (float) compBounds.height();
-      canvas.scale(scaleX, scaleY);
-    }
-    canvas.clipRect(getBounds());
+    canvas.clipRect(0, 0, getIntrinsicWidth(), getIntrinsicHeight());
     super.draw(canvas);
     canvas.restoreToCount(saveCount);
-
   }
 
   void systemAnimationsAreDisabled() {
@@ -228,27 +221,47 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
     return animator.isRunning();
   }
 
-  void playAnimation() {
+  @SuppressWarnings("WeakerAccess") public void playAnimation() {
+    playAnimation(false);
+  }
+
+  @SuppressWarnings("WeakerAccess") public void resumeAnimation() {
+    playAnimation(true);
+  }
+
+  private void playAnimation(boolean setStartTime) {
     if (layers.isEmpty()) {
       playAnimationWhenLayerAdded = true;
       reverseAnimationWhenLayerAdded = false;
       return;
     }
-    animator.setCurrentPlayTime((long) (getProgress() * animator.getDuration()));
+    if (setStartTime) {
+      animator.setCurrentPlayTime((long) (getProgress() * animator.getDuration()));
+    }
     animator.start();
   }
 
-  void reverseAnimation() {
+  @SuppressWarnings({"unused", "WeakerAccess"}) public void resumeReverseAnimation() {
+    reverseAnimation(true);
+  }
+
+  @SuppressWarnings("WeakerAccess") public void reverseAnimation() {
+    reverseAnimation(false);
+  }
+
+  private void reverseAnimation(boolean setStartTime) {
     if (layers.isEmpty()) {
       playAnimationWhenLayerAdded = false;
       reverseAnimationWhenLayerAdded = true;
       return;
     }
-    animator.setCurrentPlayTime((long) (getProgress() * animator.getDuration()));
+    if (setStartTime) {
+      animator.setCurrentPlayTime((long) (getProgress() * animator.getDuration()));
+    }
     animator.reverse();
   }
 
-  void setSpeed(float speed) {
+  @SuppressWarnings("WeakerAccess") public void setSpeed(float speed) {
     this.speed = speed;
     if (speed < 0) {
       animator.setFloatValues(1f, 0f);
@@ -259,6 +272,36 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
     if (composition != null) {
       animator.setDuration((long) (composition.getDuration() / Math.abs(speed)));
     }
+  }
+
+  @SuppressWarnings("WeakerAccess") public void setScale(float scale) {
+    this.scale = scale;
+    updateBounds();
+  }
+
+  /**
+   * Use this if you can't bundle images with your app. This may be useful if you download the
+   * animations from the network or have the images saved to an SD Card. In that case, Lottie
+   * will defer the loading of the bitmap to this delegate.
+   */
+  @SuppressWarnings({"unused", "WeakerAccess"}) public void setImageAssetDelegate(
+      @SuppressWarnings("NullableProblems") ImageAssetDelegate assetDelegate) {
+    this.imageAssetDelegate = assetDelegate;
+    if (imageAssetBitmapManager != null) {
+      imageAssetBitmapManager.setAssetDelegate(assetDelegate);
+    }
+  }
+
+  @SuppressWarnings("WeakerAccess") public float getScale() {
+    return scale;
+  }
+
+  private void updateBounds() {
+    if (composition == null) {
+      return;
+    }
+    setBounds(0, 0, (int) (composition.getBounds().width() * scale),
+        (int) (composition.getBounds().height() * scale));
   }
 
   void cancelAnimation() {
@@ -297,11 +340,11 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
   }
 
   @Override public int getIntrinsicWidth() {
-    return composition == null ? -1 : composition.getBounds().width();
+    return composition == null ? -1 : (int) (composition.getBounds().width() * scale);
   }
 
   @Override public int getIntrinsicHeight() {
-    return composition == null ? -1 : composition.getBounds().height();
+    return composition == null ? -1 : (int) (composition.getBounds().height() * scale);
   }
 
   Bitmap getImageAsset(String id) {
@@ -316,7 +359,7 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
 
     if (imageAssetBitmapManager == null) {
       imageAssetBitmapManager = new ImageAssetBitmapManager(getCallback(),
-          imageAssetsFolder, composition.getImages());
+          imageAssetsFolder, imageAssetDelegate, composition.getImages());
     }
 
     return imageAssetBitmapManager;

@@ -17,23 +17,22 @@ import java.util.Collections;
 import java.util.List;
 
 class LayerView extends AnimatableLayer {
-  private static final int SAVE_FLAGS = Canvas.CLIP_SAVE_FLAG | Canvas.CLIP_TO_LAYER_SAVE_FLAG;
+  private static final int SAVE_FLAGS = Canvas.CLIP_SAVE_FLAG | Canvas.CLIP_TO_LAYER_SAVE_FLAG |
+      Canvas.MATRIX_SAVE_FLAG;
   private MaskKeyframeAnimation mask;
   private LayerView matteLayer;
 
-  private final PorterDuffXfermode DST_OUT = new PorterDuffXfermode(PorterDuff.Mode.DST_OUT);
-  private final PorterDuffXfermode DST_IN = new PorterDuffXfermode(PorterDuff.Mode.DST_IN);
   private final RectF rect = new RectF();
   private final List<LayerView> transformLayers = new ArrayList<>();
-  private final Paint mainCanvasPaint = new Paint();
+  private final Paint mainCanvasPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint mattePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
   private final Paint maskPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  private final Paint clearPaint = new Paint();
   private final Paint imagePaint =
       new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
 
   private final Layer layerModel;
   private final LottieComposition composition;
-  private final CanvasPool canvasPool;
 
   @Nullable private LayerView parentLayer;
   /**
@@ -44,18 +43,19 @@ class LayerView extends AnimatableLayer {
   private int precompWidth;
   private int precompHeight;
 
-  LayerView(Layer layerModel, LottieComposition composition, Callback callback, CanvasPool canvasPool) {
+  LayerView(Layer layerModel, LottieComposition composition, Callback callback) {
     super(callback);
     this.layerModel = layerModel;
     this.composition = composition;
-    this.canvasPool = canvasPool;
     setBounds(composition.getBounds());
 
     if (layerModel.getMatteType() == Layer.MatteType.Invert) {
-      mattePaint.setXfermode(DST_OUT);
+      mattePaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_OUT));
     } else {
-      mattePaint.setXfermode(DST_IN);
+      mattePaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));
     }
+    maskPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.DST_IN));
+    clearPaint.setXfermode(new PorterDuffXfermode(PorterDuff.Mode.CLEAR));
 
     setupForModel();
   }
@@ -110,7 +110,6 @@ class LayerView extends AnimatableLayer {
           matteLayer.setParentLayer(parentLayer);
         }
       }
-
     }
   }
 
@@ -172,7 +171,7 @@ class LayerView extends AnimatableLayer {
     for (int i = precompLayers.size() - 1; i >= 0; i--) {
       Layer layer = precompLayers.get(i);
       LayerView layerView =
-          new LayerView(layer, composition, getCallback(), canvasPool);
+          new LayerView(layer, composition, getCallback());
       layerView.setPrecompSize(layerModel.getPreCompWidth(), layerModel.getPreCompHeight());
       if (mattedLayer != null) {
         mattedLayer.setMatteLayer(layerView);
@@ -248,11 +247,17 @@ class LayerView extends AnimatableLayer {
       parent = parent.getParentLayer();
     }
 
+    float scale = getLottieDrawable().getScale();
+    if (precompWidth != 0 || precompHeight != 0) {
+      canvas.clipRect(0, 0, precompWidth * scale, precompHeight * scale);
+    } else {
+      canvas.clipRect(0, 0,
+          getLottieDrawable().getIntrinsicWidth(),
+          getLottieDrawable().getIntrinsicHeight());
+    }
+
     if (!hasMasks() && !hasMatte()) {
       int mainCanvasCount = saveCanvas(canvas);
-      if (precompWidth != 0 || precompHeight != 0) {
-        canvas.clipRect(0, 0, precompWidth, precompHeight);
-      }
       // Now apply the parent transformations from the top down.
       for (int i = transformLayers.size() - 1; i >= 0; i--) {
         LayerView layer = transformLayers.get(i);
@@ -264,60 +269,61 @@ class LayerView extends AnimatableLayer {
       return;
     }
 
-
-    BitmapCanvas bitmapCanvas =
-        canvasPool.acquire(canvas.getWidth(), canvas.getHeight(), Bitmap.Config.ARGB_8888);
-
     // Now apply the parent transformations from the top down.
-    bitmapCanvas.save();
-    drawImageIfNeeded(bitmapCanvas);
+    rect.set(canvas.getClipBounds());
+    canvas.saveLayer(rect, mainCanvasPaint, Canvas.ALL_SAVE_FLAG);
+    canvas.drawRect(0, 0, canvas.getWidth(), canvas.getHeight(), clearPaint);
+
+    canvas.save();
+    drawImageIfNeeded(canvas);
     for (int i = transformLayers.size() - 1; i >= 0; i--) {
       LayerView layer = transformLayers.get(i);
-      applyTransformForLayer(bitmapCanvas, layer);
+      applyTransformForLayer(canvas, layer);
     }
-    super.draw(bitmapCanvas);
+    super.draw(canvas);
+    canvas.restore();
 
-    rect.set(0, 0, canvas.getWidth(), canvas.getHeight());
     if (hasMasks()) {
-      List<Mask> masks = mask.getMasks();
-      List<BaseKeyframeAnimation<?, Path>> maskAnimations = mask.getMaskAnimations();
-      for (int i = 0; i < masks.size(); i++) {
-        applyMask(bitmapCanvas, masks.get(i), maskAnimations.get(i));
-      }
+      applyMasks(canvas);
     }
-    bitmapCanvas.restore();
 
     if (hasMatte()) {
-      bitmapCanvas.saveLayer(rect, mattePaint, SAVE_FLAGS);
-      matteLayer.draw(bitmapCanvas);
-      bitmapCanvas.restore();
+      canvas.saveLayer(rect, mattePaint, SAVE_FLAGS);
+      canvas.drawRect(0, 0, canvas.getWidth(), canvas.getHeight(), clearPaint);
+      matteLayer.draw(canvas);
+      canvas.restore();
     }
-
-    if (precompWidth != 0 || precompHeight != 0) {
-      canvas.clipRect(0, 0, precompWidth, precompHeight);
-    }
-    canvas.drawBitmap(bitmapCanvas.getBitmap(), 0, 0, null);
-    canvasPool.release(bitmapCanvas);
+    canvas.restore();
   }
 
-  private void applyMask(BitmapCanvas canvas, Mask mask,
-      BaseKeyframeAnimation<?, Path> maskAnimation) {
-    switch (mask.getMaskMode()) {
-      case MaskModeSubtract:
-        maskPaint.setXfermode(DST_OUT);
-        break;
-      case MaskModeAdd:
-      default:
-        maskPaint.setXfermode(DST_IN);
-    }
-
+  private void applyMasks(Canvas canvas) {
     canvas.saveLayer(rect, maskPaint, SAVE_FLAGS);
+    canvas.drawRect(0, 0, canvas.getWidth(), canvas.getHeight(), clearPaint);
+
     for (int i = transformLayers.size() - 1; i >= 0; i--) {
       LayerView layer = transformLayers.get(i);
       applyTransformForLayer(canvas, layer);
     }
     applyTransformForLayer(canvas, this);
-    canvas.drawPath(maskAnimation.getValue(), mainCanvasPaint);
+
+    float scale = getLottieDrawable().getScale();
+    canvas.scale(scale, scale);
+
+    int size = mask.getMasks().size();
+    for (int i = 0; i < size; i++) {
+      Mask mask = this.mask.getMasks().get(i);
+      BaseKeyframeAnimation<?, Path> maskAnimation = this.mask.getMaskAnimations().get(i);
+      Path maskPath = maskAnimation.getValue();
+      switch (mask.getMaskMode()) {
+        case MaskModeSubtract:
+          maskPath.setFillType(Path.FillType.INVERSE_WINDING);
+          break;
+        case MaskModeAdd:
+        default:
+          maskPath.setFillType(Path.FillType.WINDING);
+      }
+      canvas.drawPath(maskPath, mainCanvasPaint);
+    }
     canvas.restore();
   }
 
@@ -333,6 +339,8 @@ class LayerView extends AnimatableLayer {
 
     canvas.save();
     applyTransformForLayer(canvas, this);
+    canvas.scale(getLottieDrawable().getScale(), getLottieDrawable().getScale());
+    imagePaint.setAlpha(getAlphaInternal());
     canvas.drawBitmap(bitmap, 0, 0 ,imagePaint);
     canvas.restore();
   }

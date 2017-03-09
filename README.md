@@ -1,4 +1,5 @@
 # Lottie for Android, [iOS](https://github.com/airbnb/lottie-ios), and [React Native](https://github.com/airbnb/lottie-react-native)
+<a href='https://play.google.com/store/apps/details?id=com.airbnb.lottie'><img alt='Get it on Google Play' src='https://play.google.com/intl/en_us/badges/images/generic/en_badge_web_generic.png' height="80px"/></a> 
 
 Lottie is a mobile library for Android and iOS that parses [Adobe After Effects](http://www.adobe.com/products/aftereffects.html) animations exported as json with [Bodymovin](https://github.com/bodymovin/bodymovin) and renders them natively on mobile!
 
@@ -43,7 +44,7 @@ Gradle is the only supported build configuration, so just add the dependency to 
 
 ```groovy
 dependencies {  
-  compile 'com.airbnb.android:lottie:1.5.1'
+  compile 'com.airbnb.android:lottie:1.5.3'
 }
 ```
 
@@ -125,6 +126,16 @@ subdirectory of assets. Just call `setImageAssetsFolder` on `LottieAnimationView
 `LottieDrawable` with the relative folder inside of assets and make sure that the images that 
 bodymovin export are in that folder with their names unchanged (should be img_#).
 If you use `LottieDrawable` directly, you must call `recycleBitmaps` when you are done with it.
+
+If you need to provide your own bitmaps if you downloaded them from the network or something, you
+ can provide a delegate to do that:
+ ```java
+animationView.setImageAssetDelegate(new ImageAssetDelegate() {
+          @Override public Bitmap fetchBitmap(LottieImageAsset asset) {
+            getBitmap(asset);
+          }
+        });
+```
 
 ## Supported After Effects Features
 
@@ -246,7 +257,8 @@ If you use `LottieDrawable` directly, you must call `recycleBitmaps` when you ar
 
 ## Performance and Memory
 1. If the composition has no masks or mattes then the performance and memory overhead should be quite good. No bitmaps are created and most operations are simple canvas draw operations.
-2. If the composition has masks or mattes, a bitmap will be created and there will be a minor performance hit has it gets drawn.  
+2. If the composition has masks or mattes, offscreen buffers will be used and there will 
+be a performance hit has it gets drawn.  
 3. If you are using your animation in a list, it is recommended to use a CacheStrategy in 
 LottieAnimationView.setAnimation(String, CacheStrategy) so the animations do not have to be deserialized every time.
 

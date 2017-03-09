@@ -62,7 +62,7 @@ public class AnimationFragment extends Fragment {
   }
 
   private final Map<String, String> assetFolders = new HashMap<String, String>() {{
-    put("WeAccept.json", "Tests/weaccept");
+    put("WeAccept.json", "Images/WeAccept");
   }};
 
   private OkHttpClient client;
@@ -184,7 +184,7 @@ public class AnimationFragment extends Fragment {
       if (animationView.getProgress() == 1f) {
         animationView.setProgress(0f);
       }
-      animationView.playAnimation();
+      animationView.resumeAnimation();
       postUpdatePlayButtonText();
     }
   }
