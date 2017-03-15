@@ -5,15 +5,16 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
+import android.graphics.ColorFilter;
+import android.graphics.Matrix;
+import android.graphics.PixelFormat;
 import android.graphics.drawable.Drawable;
+import android.support.annotation.FloatRange;
+import android.support.annotation.IntRange;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.v4.util.LongSparseArray;
 import android.view.View;
 import android.view.animation.LinearInterpolator;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * This can be used to show an lottie animation in any place that would normally take a drawable.
@@ -24,22 +25,24 @@ import java.util.List;
  * handles bitmap recycling and asynchronous loading
  * of compositions.
  */
-public class LottieDrawable extends AnimatableLayer implements Drawable.Callback {
+public class LottieDrawable extends Drawable implements Drawable.Callback {
+  private final Matrix matrix = new Matrix();
   private LottieComposition composition;
   private final ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
   private float speed = 1f;
   private float scale = 1f;
+  private float progress = 0f;
 
   @Nullable private ImageAssetBitmapManager imageAssetBitmapManager;
   @Nullable private String imageAssetsFolder;
   @Nullable private ImageAssetDelegate imageAssetDelegate;
-  private boolean playAnimationWhenLayerAdded;
-  private boolean reverseAnimationWhenLayerAdded;
+  private boolean playAnimationWhenCompositionAdded;
+  private boolean reverseAnimationWhenCompositionAdded;
   private boolean systemAnimationsAreDisabled;
+  @Nullable private CompositionLayer compositionLayer;
+  private int alpha = 255;
 
   @SuppressWarnings("WeakerAccess") public LottieDrawable() {
-    super(null);
-
     animator.setRepeatCount(0);
     animator.setInterpolator(new LinearInterpolator());
     animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
@@ -58,30 +61,14 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
    * Returns whether or not any layers in this composition has masks.
    */
   @SuppressWarnings({"unused", "WeakerAccess"}) public boolean hasMasks() {
-    for (AnimatableLayer layer : layers) {
-      if (!(layer instanceof LayerView)) {
-        continue;
-      }
-      if (((LayerView) layer).hasMasks()){
-        return true;
-      }
-    }
-    return false;
+    return compositionLayer != null && compositionLayer.hasMasks();
   }
 
   /**
    * Returns whether or not any layers in this composition has a matte layer.
    */
   @SuppressWarnings({"unused", "WeakerAccess"}) public boolean hasMatte() {
-    for (AnimatableLayer layer : layers) {
-      if (!(layer instanceof LayerView)) {
-        continue;
-      }
-      if (((LayerView) layer).hasMatte()){
-        return true;
-      }
-    }
-    return false;
+    return compositionLayer != null && compositionLayer.hasMatte();
   }
 
   /**
@@ -135,56 +122,27 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
     setSpeed(speed);
     setScale(1f);
     updateBounds();
-    buildLayersForComposition(composition);
+    compositionLayer = new CompositionLayer(
+        this, Layer.Factory.newInstance(composition), composition.getLayers(), composition);
 
-    setProgress(getProgress());
+    setProgress(progress);
+    if (playAnimationWhenCompositionAdded) {
+      playAnimationWhenCompositionAdded = false;
+      playAnimation();
+    }
+    if (reverseAnimationWhenCompositionAdded) {
+      reverseAnimationWhenCompositionAdded = false;
+      reverseAnimation();
+    }
+
     return true;
   }
 
   private void clearComposition() {
     recycleBitmaps();
-    clearLayers();
+    compositionLayer = null;
     imageAssetBitmapManager = null;
-  }
-
-  private void buildLayersForComposition(LottieComposition composition) {
-    if (composition == null) {
-      throw new IllegalStateException("Composition is null");
-    }
-    LongSparseArray<LayerView> layerMap = new LongSparseArray<>(composition.getLayers().size());
-    List<LayerView> layers = new ArrayList<>(composition.getLayers().size());
-    LayerView mattedLayer = null;
-    for (int i = composition.getLayers().size() - 1; i >= 0; i--) {
-      Layer layer = composition.getLayers().get(i);
-      LayerView layerView;
-      layerView = new LayerView(layer, composition, this);
-      layerMap.put(layerView.getId(), layerView);
-      if (mattedLayer != null) {
-        mattedLayer.setMatteLayer(layerView);
-        mattedLayer = null;
-      } else {
-        layers.add(layerView);
-        if (layer.getMatteType() == Layer.MatteType.Add) {
-          mattedLayer = layerView;
-        } else if (layer.getMatteType() == Layer.MatteType.Invert) {
-          mattedLayer = layerView;
-        }
-      }
-    }
-
-    for (int i = 0; i < layers.size(); i++) {
-      LayerView layerView = layers.get(i);
-      addLayer(layerView);
-    }
-
-    for (int i = 0; i < layerMap.size(); i++) {
-      long key = layerMap.keyAt(i);
-      LayerView layerView = layerMap.get(key);
-      LayerView parentLayer = layerMap.get(layerView.getLayerModel().getParentId());
-      if (parentLayer != null) {
-        layerView.setParentLayer(parentLayer);
-      }
-    }
+    invalidateSelf();
   }
 
   @Override public void invalidateSelf() {
@@ -194,30 +152,44 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
     }
   }
 
+  @Override public void setAlpha(@IntRange(from = 0, to = 255) int alpha) {
+    this.alpha = alpha;
+  }
+
+  @Override public int getAlpha() {
+    return alpha;
+  }
+
+  @Override public void setColorFilter(@Nullable ColorFilter colorFilter) {
+    // Do nothing.
+  }
+
+  @Override public int getOpacity() {
+    return PixelFormat.TRANSLUCENT;
+  }
+
   @Override public void draw(@NonNull Canvas canvas) {
-    if (composition == null) {
+    if (compositionLayer == null) {
       return;
     }
-
-    int saveCount = canvas.save();
-    canvas.clipRect(0, 0, getIntrinsicWidth(), getIntrinsicHeight());
-    super.draw(canvas);
-    canvas.restoreToCount(saveCount);
+    matrix.reset();
+    matrix.preScale(scale, scale);
+    compositionLayer.draw(canvas, matrix, alpha);
   }
 
   void systemAnimationsAreDisabled() {
     systemAnimationsAreDisabled = true;
   }
 
-  void loop(boolean loop) {
+  @SuppressWarnings("WeakerAccess") public void loop(boolean loop) {
     animator.setRepeatCount(loop ? ValueAnimator.INFINITE : 0);
   }
 
-  boolean isLooping() {
+  @SuppressWarnings("WeakerAccess") public boolean isLooping() {
     return animator.getRepeatCount() == ValueAnimator.INFINITE;
   }
 
-  boolean isAnimating() {
+  @SuppressWarnings("WeakerAccess") public boolean isAnimating() {
     return animator.isRunning();
   }
 
@@ -230,13 +202,13 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
   }
 
   private void playAnimation(boolean setStartTime) {
-    if (layers.isEmpty()) {
-      playAnimationWhenLayerAdded = true;
-      reverseAnimationWhenLayerAdded = false;
+    if (compositionLayer == null) {
+      playAnimationWhenCompositionAdded = true;
+      reverseAnimationWhenCompositionAdded = false;
       return;
     }
     if (setStartTime) {
-      animator.setCurrentPlayTime((long) (getProgress() * animator.getDuration()));
+      animator.setCurrentPlayTime((long) (progress * animator.getDuration()));
     }
     animator.start();
   }
@@ -250,13 +222,13 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
   }
 
   private void reverseAnimation(boolean setStartTime) {
-    if (layers.isEmpty()) {
-      playAnimationWhenLayerAdded = false;
-      reverseAnimationWhenLayerAdded = true;
+    if (compositionLayer == null) {
+      playAnimationWhenCompositionAdded = false;
+      reverseAnimationWhenCompositionAdded = true;
       return;
     }
     if (setStartTime) {
-      animator.setCurrentPlayTime((long) (getProgress() * animator.getDuration()));
+      animator.setCurrentPlayTime((long) (progress * animator.getDuration()));
     }
     animator.reverse();
   }
@@ -272,6 +244,17 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
     if (composition != null) {
       animator.setDuration((long) (composition.getDuration() / Math.abs(speed)));
     }
+  }
+
+  public void setProgress(@FloatRange(from = 0f, to = 1f) float progress) {
+    this.progress = progress;
+    if (compositionLayer != null) {
+      compositionLayer.setProgress(progress);
+    }
+  }
+
+  public float getProgress() {
+    return progress;
   }
 
   @SuppressWarnings("WeakerAccess") public void setScale(float scale) {
@@ -296,6 +279,10 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
     return scale;
   }
 
+  @SuppressWarnings("WeakerAccess") public LottieComposition getComposition() {
+    return composition;
+  }
+
   private void updateBounds() {
     if (composition == null) {
       return;
@@ -304,38 +291,25 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
         (int) (composition.getBounds().height() * scale));
   }
 
-  void cancelAnimation() {
-    playAnimationWhenLayerAdded = false;
-    reverseAnimationWhenLayerAdded = false;
+  @SuppressWarnings("WeakerAccess") public void cancelAnimation() {
+    playAnimationWhenCompositionAdded = false;
+    reverseAnimationWhenCompositionAdded = false;
     animator.cancel();
   }
 
-  @Override
-  void addLayer(AnimatableLayer layer) {
-    super.addLayer(layer);
-    if (playAnimationWhenLayerAdded) {
-      playAnimationWhenLayerAdded = false;
-      playAnimation();
-    }
-    if (reverseAnimationWhenLayerAdded) {
-      reverseAnimationWhenLayerAdded = false;
-      reverseAnimation();
-    }
-  }
-
-  void addAnimatorUpdateListener(ValueAnimator.AnimatorUpdateListener updateListener) {
+  @SuppressWarnings("WeakerAccess") public void addAnimatorUpdateListener(ValueAnimator.AnimatorUpdateListener updateListener) {
     animator.addUpdateListener(updateListener);
   }
 
-  void removeAnimatorUpdateListener(ValueAnimator.AnimatorUpdateListener updateListener) {
+  @SuppressWarnings("WeakerAccess") public void removeAnimatorUpdateListener(ValueAnimator.AnimatorUpdateListener updateListener) {
     animator.removeUpdateListener(updateListener);
   }
 
-  void addAnimatorListener(Animator.AnimatorListener listener) {
+  @SuppressWarnings("WeakerAccess") public void addAnimatorListener(Animator.AnimatorListener listener) {
     animator.addListener(listener);
   }
 
-  void removeAnimatorListener(Animator.AnimatorListener listener) {
+  @SuppressWarnings("WeakerAccess") public void removeAnimatorListener(Animator.AnimatorListener listener) {
     animator.removeListener(listener);
   }
 
@@ -381,7 +355,7 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
    * These Drawable.Callback methods proxy the calls so that this is the drawable that is
    * actually invalidated, not a child one which will not pass the view's validateDrawable check.
    */
-  @Override public void invalidateDrawable(Drawable who) {
+  @Override public void invalidateDrawable(@NonNull Drawable who) {
     Callback callback = getCallback();
     if (callback == null) {
       return;
@@ -389,7 +363,7 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
     callback.invalidateDrawable(this);
   }
 
-  @Override public void scheduleDrawable(Drawable who, Runnable what, long when) {
+  @Override public void scheduleDrawable(@NonNull Drawable who, @NonNull Runnable what, long when) {
     Callback callback = getCallback();
     if (callback == null) {
       return;
@@ -397,7 +371,7 @@ public class LottieDrawable extends AnimatableLayer implements Drawable.Callback
     callback.scheduleDrawable(this, what, when);
   }
 
-  @Override public void unscheduleDrawable(Drawable who, Runnable what) {
+  @Override public void unscheduleDrawable(@NonNull Drawable who, @NonNull Runnable what) {
     Callback callback = getCallback();
     if (callback == null) {
       return;

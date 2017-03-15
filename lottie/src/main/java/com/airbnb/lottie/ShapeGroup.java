@@ -33,6 +33,8 @@ class ShapeGroup {
         return ShapeTrimPath.Factory.newInstance(json, composition);
       case "sr":
         return PolystarShape.Factory.newInstance(json, composition);
+      case "mm":
+        return MergePaths.Factory.newInstance(json);
       default:
         Log.w(L.TAG, "Unknown shape type " + type);
     }
@@ -42,7 +44,7 @@ class ShapeGroup {
   private final String name;
   private final List<Object> items;
 
-  private ShapeGroup(String name, List<Object> items) {
+  ShapeGroup(String name, List<Object> items) {
     this.name = name;
     this.items = items;
   }

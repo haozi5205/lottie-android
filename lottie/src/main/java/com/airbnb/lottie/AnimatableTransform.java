@@ -1,15 +1,19 @@
 package com.airbnb.lottie;
 
+import android.graphics.PointF;
+
 import org.json.JSONObject;
 
-class AnimatableTransform {
+import java.util.Collections;
+
+class AnimatableTransform implements ModifierContent {
   private final AnimatablePathValue anchorPoint;
-  private final IAnimatablePathValue position;
+  private final AnimatableValue<PointF> position;
   private final AnimatableScaleValue scale;
   private final AnimatableFloatValue rotation;
   private final AnimatableIntegerValue opacity;
 
-  AnimatableTransform(AnimatablePathValue anchorPoint, IAnimatablePathValue position,
+  private AnimatableTransform(AnimatablePathValue anchorPoint, AnimatableValue<PointF> position,
       AnimatableScaleValue scale, AnimatableFloatValue rotation, AnimatableIntegerValue opacity) {
     this.anchorPoint = anchorPoint;
     this.position = position;
@@ -22,21 +26,21 @@ class AnimatableTransform {
     private Factory() {
     }
 
-    static AnimatableTransform newInstance(LottieComposition composition) {
+    static AnimatableTransform newInstance() {
       AnimatablePathValue anchorPoint = new AnimatablePathValue();
-      IAnimatablePathValue position = new AnimatablePathValue();
-      AnimatableScaleValue scale = AnimatableScaleValue.Factory.newInstance(composition);
-      AnimatableFloatValue rotation = AnimatableFloatValue.Factory.newInstance(composition, 0f);
-      AnimatableIntegerValue opacity = AnimatableIntegerValue.Factory.newInstance(composition, 255);
+      AnimatableValue<PointF> position = new AnimatablePathValue();
+      AnimatableScaleValue scale = AnimatableScaleValue.Factory.newInstance();
+      AnimatableFloatValue rotation = AnimatableFloatValue.Factory.newInstance();
+      AnimatableIntegerValue opacity = AnimatableIntegerValue.Factory.newInstance();
       return new AnimatableTransform(anchorPoint, position, scale, rotation, opacity);
     }
 
     static AnimatableTransform newInstance(JSONObject json, LottieComposition composition) {
       AnimatablePathValue anchorPoint = null;
-      IAnimatablePathValue position = null;
-      AnimatableScaleValue scale = null;
+      AnimatableValue<PointF> position = null;
+      AnimatableScaleValue scale;
       AnimatableFloatValue rotation = null;
-      AnimatableIntegerValue opacity = null;
+      AnimatableIntegerValue opacity;
       JSONObject anchorJson = json.optJSONObject("a");
       if (anchorJson != null) {
         anchorPoint = new AnimatablePathValue(anchorJson.opt("k"), composition);
@@ -54,9 +58,10 @@ class AnimatableTransform {
 
       JSONObject scaleJson = json.optJSONObject("s");
       if (scaleJson != null) {
-        scale = AnimatableScaleValue.Factory.newInstance(scaleJson, composition, false);
+        scale = AnimatableScaleValue.Factory.newInstance(scaleJson, composition);
       } else {
-        throwMissingTransform("scale");
+        // Somehow some community animations don't have scale in the transform.
+        scale = new AnimatableScaleValue(Collections.<Keyframe<ScaleXY>>emptyList(), new ScaleXY());
       }
 
       JSONObject rotationJson = json.optJSONObject("r");
@@ -71,9 +76,10 @@ class AnimatableTransform {
 
       JSONObject opacityJson = json.optJSONObject("o");
       if (opacityJson != null) {
-        opacity = AnimatableIntegerValue.Factory.newInstance(opacityJson, composition, false, true);
+        opacity = AnimatableIntegerValue.Factory.newInstance(opacityJson, composition);
       } else {
-        throwMissingTransform("opacity");
+        // Somehow some community animations don't have opacity in the transform.
+        opacity = new AnimatableIntegerValue(Collections.<Keyframe<Integer>>emptyList(), 100);
       }
       return new AnimatableTransform(anchorPoint, position, scale, rotation, opacity);
     }
@@ -87,7 +93,7 @@ class AnimatableTransform {
     return anchorPoint;
   }
 
-  IAnimatablePathValue getPosition() {
+  AnimatableValue<PointF> getPosition() {
     return position;
   }
 

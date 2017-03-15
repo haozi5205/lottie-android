@@ -11,14 +11,14 @@ import java.util.List;
  * @param <A> Animation type
  */
 abstract class BaseKeyframeAnimation<K, A> {
-  interface AnimationListener<A> {
-    void onValueChanged(A value);
+  interface AnimationListener {
+    void onValueChanged();
   }
 
-  final List<AnimationListener<A>> listeners = new ArrayList<>();
+  final List<AnimationListener> listeners = new ArrayList<>();
   private boolean isDiscrete = false;
 
-  final List<? extends Keyframe<K>> keyframes;
+  private final List<? extends Keyframe<K>> keyframes;
   private float progress = 0f;
 
   @Nullable private Keyframe<K> cachedKeyframe;
@@ -31,12 +31,8 @@ abstract class BaseKeyframeAnimation<K, A> {
     isDiscrete = true;
   }
 
-  void addUpdateListener(AnimationListener<A> listener) {
+  void addUpdateListener(AnimationListener listener) {
     listeners.add(listener);
-  }
-
-  void removeUpdateListener(AnimationListener<A> listener) {
-    listeners.remove(listener);
   }
 
   void setProgress(@FloatRange(from = 0f, to = 1f) float progress) {
@@ -51,9 +47,8 @@ abstract class BaseKeyframeAnimation<K, A> {
     }
     this.progress = progress;
 
-    A value = getValue();
     for (int i = 0; i < listeners.size(); i++) {
-      listeners.get(i).onValueChanged(value);
+      listeners.get(i).onValueChanged();
     }
   }
 
@@ -96,6 +91,7 @@ abstract class BaseKeyframeAnimation<K, A> {
     }
     float progressIntoFrame = progress - keyframe.getStartProgress();
     float keyframeProgress = keyframe.getEndProgress() - keyframe.getStartProgress();
+    //noinspection ConstantConditions
     return keyframe.interpolator.getInterpolation(progressIntoFrame / keyframeProgress);
   }
 

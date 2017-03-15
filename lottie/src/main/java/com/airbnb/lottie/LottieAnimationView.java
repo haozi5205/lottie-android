@@ -45,6 +45,7 @@ public class LottieAnimationView extends AppCompatImageView {
    * Caching strategy for compositions that will be reused frequently.
    * Weak or Strong indicates the GC reference strength of the composition in the cache.
    */
+  @SuppressWarnings("WeakerAccess")
   public enum CacheStrategy {
     None,
     Weak,
@@ -129,7 +130,7 @@ public class LottieAnimationView extends AppCompatImageView {
     super.setImageDrawable(drawable);
   }
 
-  @Override public void invalidateDrawable(Drawable dr) {
+  @Override public void invalidateDrawable(@NonNull Drawable dr) {
     if (getDrawable() == lottieDrawable) {
       // We always want to invalidate the root drawable to it redraws the whole drawable.
       // Eventually it would be great to be able to invalidate just the changed region.
@@ -169,8 +170,7 @@ public class LottieAnimationView extends AppCompatImageView {
     }
   }
 
-  @Override
-  protected void onDetachedFromWindow() {
+  @Override protected void onDetachedFromWindow() {
     recycleBitmaps();
     super.onDetachedFromWindow();
   }
@@ -185,7 +185,7 @@ public class LottieAnimationView extends AppCompatImageView {
    * <p>
    * Will not cache the composition once loaded.
    */
-  public void setAnimation(String animationName) {
+  @SuppressWarnings("WeakerAccess") public void setAnimation(String animationName) {
     setAnimation(animationName, defaultCacheStrategy);
   }
 
@@ -197,8 +197,7 @@ public class LottieAnimationView extends AppCompatImageView {
    * strong reference to the composition once it is loaded
    * and deserialized. {@link CacheStrategy#Weak} will hold a weak reference to said composition.
    */
-  @SuppressWarnings("WeakerAccess")
-  public void setAnimation(final String animationName, final CacheStrategy cacheStrategy) {
+  @SuppressWarnings("WeakerAccess") public void setAnimation(final String animationName, final CacheStrategy cacheStrategy) {
     this.animationName = animationName;
     if (weakRefCache.containsKey(animationName)) {
       WeakReference<LottieComposition> compRef = weakRefCache.get(animationName);
@@ -368,7 +367,7 @@ public class LottieAnimationView extends AppCompatImageView {
    * animations from the network or have the images saved to an SD Card. In that case, Lottie
    * will defer the loading of the bitmap to this delegate.
    */
-  public void setImageAssetDelegate(ImageAssetDelegate assetDelegate) {
+  @SuppressWarnings("unused") public void setImageAssetDelegate(ImageAssetDelegate assetDelegate) {
     lottieDrawable.setImageAssetDelegate(assetDelegate);
   }
 
@@ -392,8 +391,7 @@ public class LottieAnimationView extends AppCompatImageView {
     lottieDrawable.setProgress(progress);
   }
 
-  @FloatRange(from = 0.0f, to = 1.0f)
-  public float getProgress() {
+  @FloatRange(from = 0.0f, to = 1.0f) public float getProgress() {
     return lottieDrawable.getProgress();
   }
 
