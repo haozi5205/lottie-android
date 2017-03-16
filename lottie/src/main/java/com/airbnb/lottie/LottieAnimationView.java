@@ -68,6 +68,7 @@ public class LottieAnimationView extends AppCompatImageView {
   private final LottieDrawable lottieDrawable = new LottieDrawable();
   private CacheStrategy defaultCacheStrategy;
   private String animationName;
+  private boolean wasAnimatingWhenDetached = false;
 
   @Nullable private Cancellable compositionLoader;
   /**
@@ -170,13 +171,40 @@ public class LottieAnimationView extends AppCompatImageView {
     }
   }
 
+  @Override protected void onAttachedToWindow() {
+    super.onAttachedToWindow();
+    if (wasAnimatingWhenDetached) {
+      playAnimation();
+    }
+  }
+
   @Override protected void onDetachedFromWindow() {
+    if (isAnimating()) {
+      cancelAnimation();
+      wasAnimatingWhenDetached = true;
+    }
     recycleBitmaps();
     super.onDetachedFromWindow();
   }
 
   @VisibleForTesting void recycleBitmaps() {
     lottieDrawable.recycleBitmaps();
+  }
+
+  /**
+   * Enable hardware acceleration for this view.
+   * READ THIS BEFORE ENABLING HARDWARE ACCELERATION:
+   * 1) Test your animation on the minimum API level you support. Some drawing features such as
+   *    dashes and stroke caps have min api levels
+   *    (https://developer.android.com/guide/topics/graphics/hardware-accel.html#unsupported)
+   * 2) Enabling hardware acceleration is not always more performant. Check it with your specific
+   *    animation only if you are having performance issues with software rendering.
+   * 3) Software rendering is safer and will be consistent across devices. Manufacturers can
+   *    potentially break hardware rendering with bugs in their SKIA engine. Lottie cannot do
+   *    anything about that.
+   */
+  @SuppressWarnings("WeakerAccess") public void useExperimentalHardwareAcceleration() {
+    setLayerType(LAYER_TYPE_HARDWARE, null);
   }
 
   /**
