@@ -44,6 +44,7 @@ public class LottieTest {
     TestRobot.testLinearAnimation(activity, "lottiefiles.com - Emoji Tongue.json");
     TestRobot.testLinearAnimation(activity, "lottiefiles.com - Emoji Wink.json");
     TestRobot.testLinearAnimation(activity, "lottiefiles.com - Emoji Shock.json");
+    TestRobot.testLinearAnimation(activity, "lottiefiles.com - Im Thirsty.json");
     TestRobot.testLinearAnimation(activity, "lottiefiles.com - Play and Like It.json");
     TestRobot.testLinearAnimation(activity, "lottiefiles.com - Gears.json");
     TestRobot.testLinearAnimation(activity, "lottiefiles.com - Postcard.json");
@@ -54,6 +55,7 @@ public class LottieTest {
     TestRobot.testLinearAnimation(activity, "lottiefiles.com - ATM.json");
     TestRobot.testLinearAnimation(activity, "Tests/CheckSwitch.json");
     TestRobot.testLinearAnimation(activity, "Tests/Fill.json");
+    TestRobot.testLinearAnimation(activity, "Tests/GradientFill.json");
     TestRobot.testLinearAnimation(activity, "Tests/KeyframeTypes.json");
     TestRobot.testLinearAnimation(activity, "Tests/Laugh4.json");
     TestRobot.testLinearAnimation(activity, "Tests/LoopPlayOnce.json");

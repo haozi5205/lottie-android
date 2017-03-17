@@ -4,6 +4,7 @@ import android.graphics.Canvas;
 import android.graphics.Matrix;
 import android.graphics.Path;
 import android.support.annotation.Nullable;
+import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.Iterator;
@@ -11,6 +12,7 @@ import java.util.List;
 
 class ContentGroup implements DrawingContent, PathContent,
     BaseKeyframeAnimation.AnimationListener {
+  private static final String TAG = ContentGroup.class.getSimpleName();
   private final Matrix matrix = new Matrix();
   private final Path path = new Path();
 
@@ -38,6 +40,8 @@ class ContentGroup implements DrawingContent, PathContent,
       Object item = items.get(i);
       if (item instanceof ShapeFill) {
         contents.add(new FillContent(lottieDrawable, layer, (ShapeFill) item));
+      } else if (item instanceof GradientFill) {
+        contents.add(new GradientFillContent(lottieDrawable, layer, (GradientFill) item));
       } else if (item instanceof ShapeStroke) {
         contents.add(new StrokeContent(lottieDrawable, layer, (ShapeStroke) item));
       } else if (item instanceof ShapeGroup) {
@@ -54,8 +58,11 @@ class ContentGroup implements DrawingContent, PathContent,
         contents.add(new TrimPathContent(layer, (ShapeTrimPath) item));
       } else //noinspection StatementWithEmptyBody
         if (item instanceof MergePaths) {
-        // Merge paths are not ready yet.
-        // contents.add(new MergePathsContent((MergePaths) item));
+          if (lottieDrawable.enableMergePathsForKitKatAndAbove()) {
+            contents.add(new MergePathsContent((MergePaths) item));
+          } else {
+            Log.w(TAG, "Animation contains merge paths but they are disabled.");
+          }
       }
     }
 
