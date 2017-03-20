@@ -14,7 +14,7 @@ For the first time, designers can create **and ship** beautiful animations witho
 ![Example3](gifs/Example3.gif)
 
 
-![Community](gifs/Community 2_3.gif)
+![Community](gifs/Community%202_3.gif)
 
 
 ![Example4](gifs/Example4.gif)
@@ -42,7 +42,7 @@ You can build the sample app yourself or download it from the [Play Store](https
 
 Gradle is the only supported build configuration, so just add the dependency to your project `build.gradle` file:
 
-### Stable
+### Release
 ```groovy
 dependencies {  
   compile 'com.airbnb.android:lottie:1.5.3'
@@ -52,7 +52,7 @@ dependencies {
 ### Beta
 ```groovy
 dependencies {  
-  compile 'com.airbnb.android:lottie:2.0.0-beta1'
+  compile 'com.airbnb.android:lottie:2.0.0-beta2'
 }
 ```
 

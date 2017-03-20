@@ -5,16 +5,21 @@ import android.graphics.DashPathEffect;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.PathMeasure;
+import android.graphics.RectF;
 import android.support.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
 
 class StrokeContent implements DrawingContent, BaseKeyframeAnimation.AnimationListener {
+  private final PathMeasure pm = new PathMeasure();
   private final Path path = new Path();
+  private final Path trimPathPath = new Path();
   private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+  private final RectF rect = new RectF();
   private final LottieDrawable lottieDrawable;
-  private final List<PathContent> paths = new ArrayList<>();
+  private final List<PathGroup> pathGroups = new ArrayList<>();
   private final float[] dashPatternValues;
 
   private final BaseKeyframeAnimation<?, Integer> colorAnimation;
@@ -73,12 +78,36 @@ class StrokeContent implements DrawingContent, BaseKeyframeAnimation.AnimationLi
   }
 
   @Override public void setContents(List<Content> contentsBefore, List<Content> contentsAfter) {
-    for (int i = 0; i < contentsAfter.size(); i++) {
-      Content content = contentsAfter.get(i);
-      if (content instanceof PathContent) {
-        paths.add((PathContent) content);
+    TrimPathContent trimPathContentBefore = null;
+    for (int i = contentsBefore.size() - 1; i >= 0; i--) {
+      Content content = contentsBefore.get(i);
+      if (content instanceof TrimPathContent &&
+          ((TrimPathContent) content).getType() == ShapeTrimPath.Type.Individually) {
+        trimPathContentBefore = (TrimPathContent) content;
       }
     }
+    if (trimPathContentBefore != null) {
+      trimPathContentBefore.addListener(this);
+    }
+
+    PathGroup currentPathGroup = null;
+    for (int i = contentsAfter.size() - 1; i >= 0; i--) {
+      Content content = contentsAfter.get(i);
+      if (content instanceof TrimPathContent &&
+          ((TrimPathContent) content).getType() == ShapeTrimPath.Type.Individually) {
+        if (currentPathGroup != null) {
+          pathGroups.add(currentPathGroup);
+        }
+        currentPathGroup = new PathGroup((TrimPathContent) content);
+        ((TrimPathContent) content).addListener(this);
+      } else if (content instanceof PathContent) {
+        if (currentPathGroup == null) {
+          currentPathGroup = new PathGroup(trimPathContentBefore);
+        }
+        currentPathGroup.paths.add((PathContent) content);
+      }
+    }
+    pathGroups.add(currentPathGroup);
   }
 
   @Override public void draw(Canvas canvas, Matrix parentMatrix, int parentAlpha) {
@@ -86,18 +115,112 @@ class StrokeContent implements DrawingContent, BaseKeyframeAnimation.AnimationLi
     int alpha = (int) ((parentAlpha / 255f * opacityAnimation.getValue() / 100f) * 255);
     paint.setAlpha(alpha);
     paint.setStrokeWidth(widthAnimation.getValue() * Utils.getScale(parentMatrix));
-    if (paint.getStrokeWidth() < 1) {
+    if (paint.getStrokeWidth() <= 0) {
       // Android draws a hairline stroke for 0, After Effects doesn't.
       return;
     }
     applyDashPatternIfNeeded();
 
-    path.reset();
-    for (int i = 0; i < paths.size(); i++) {
-      this.path.addPath(paths.get(i).getPath(), parentMatrix);
-    }
+    for (int i = 0; i < pathGroups.size(); i++) {
+      PathGroup pathGroup = pathGroups.get(i);
 
-    canvas.drawPath(path, paint);
+
+      if (pathGroup.trimPath != null) {
+        applyTrimPath(canvas, pathGroup, parentMatrix);
+      } else {
+        path.reset();
+        for (int j = pathGroup.paths.size() - 1; j >= 0; j--) {
+          path.addPath(pathGroup.paths.get(j).getPath(), parentMatrix);
+        }
+        canvas.drawPath(path, paint);
+      }
+    }
+  }
+
+  private void applyTrimPath(Canvas canvas, PathGroup pathGroup, Matrix parentMatrix) {
+    if (pathGroup.trimPath == null) {
+      return;
+    }
+    path.reset();
+    for (int j = pathGroup.paths.size() - 1; j >= 0; j--) {
+      path.addPath(pathGroup.paths.get(j).getPath(), parentMatrix);
+    }
+    pm.setPath(path, false);
+    float totalLength = pm.getLength();
+    while (pm.nextContour()) {
+      totalLength += pm.getLength();
+    }
+    float offsetLength = totalLength * pathGroup.trimPath.getOffset().getValue() / 360f;
+    float startLength =
+        totalLength * pathGroup.trimPath.getStart().getValue() / 100f + offsetLength;
+    float endLength =
+        totalLength * pathGroup.trimPath.getEnd().getValue() / 100f + offsetLength;
+
+    float currentLength = 0;
+    for (int j = pathGroup.paths.size() - 1; j >= 0; j--) {
+      trimPathPath.set(pathGroup.paths.get(j).getPath());
+      trimPathPath.transform(parentMatrix);
+      pm.setPath(trimPathPath, false);
+      float length = pm.getLength();
+      if (endLength > totalLength && endLength - totalLength < currentLength + length &&
+          currentLength < endLength - totalLength) {
+        // Draw the segment when the end is greater than the length which wraps around to the
+        // beginning.
+        float startValue;
+        if (startLength > totalLength) {
+          startValue = (startLength - totalLength) / length;
+        } else {
+          startValue = 0;
+        }
+        float endValue = Math.min((endLength - totalLength) / length, 1);
+        Utils.applyTrimPathIfNeeded(trimPathPath, startValue, endValue, 0);
+        canvas.drawPath(trimPathPath, paint);
+      } else //noinspection StatementWithEmptyBody
+        if (currentLength + length < startLength || currentLength > endLength) {
+        // Do nothing
+      } else if (currentLength + length <= endLength && startLength < currentLength) {
+        canvas.drawPath(trimPathPath, paint);
+      } else {
+        float startValue;
+        if (startLength < currentLength) {
+          startValue = 0;
+        } else {
+          startValue = (startLength - currentLength) / length;
+        }
+        float endValue;
+        if (endLength > currentLength + length) {
+          endValue = 1f;
+        } else {
+          endValue = (endLength - currentLength) / length;
+        }
+        Utils.applyTrimPathIfNeeded(trimPathPath, startValue, endValue, 0);
+        canvas.drawPath(trimPathPath, paint);
+      }
+      currentLength += length;
+    }
+  }
+
+  @Override public void getBounds(RectF outBounds, Matrix parentMatrix) {
+    path.reset();
+    for (int i = 0; i < pathGroups.size(); i++) {
+      PathGroup pathGroup = pathGroups.get(i);
+      for (int j = 0; j < pathGroup.paths.size(); j++) {
+        path.addPath(pathGroup.paths.get(i).getPath(), parentMatrix);
+      }
+    }
+    path.computeBounds(rect, false);
+
+    float width = widthAnimation.getValue();
+    rect.set(rect.left - width / 2f, rect.top - width / 2f,
+        rect.right + width / 2f, rect.bottom + width / 2f);
+    outBounds.set(rect);
+    // Add padding to account for rounding errors.
+    outBounds.set(
+        outBounds.left - 1,
+        outBounds.top - 1,
+        outBounds.right + 1,
+        outBounds.bottom + 1
+    );
   }
 
   private void applyDashPatternIfNeeded() {
@@ -125,5 +248,17 @@ class StrokeContent implements DrawingContent, BaseKeyframeAnimation.AnimationLi
     }
     float offset = dashPatternOffsetAnimation == null ? 0f : dashPatternOffsetAnimation.getValue();
     paint.setPathEffect(new DashPathEffect(dashPatternValues, offset));
+  }
+
+  /**
+   * Data class to help drawing trim paths individually.
+   */
+  private static final class PathGroup {
+    private final List<PathContent> paths = new ArrayList<>();
+    @Nullable private final TrimPathContent trimPath;
+
+    private PathGroup(@Nullable TrimPathContent trimPath) {
+      this.trimPath = trimPath;
+    }
   }
 }

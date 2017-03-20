@@ -32,8 +32,7 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:background="@drawable/outline"
-            android:duplicateParentState="true"
-            app:lottie_enableMergePathsForKitKatAndAbove="true"/>
+            android:duplicateParentState="true"/>
 
         <LinearLayout
             android:id="@+id/instructions"
@@ -179,6 +178,6 @@
         android:textColor="@android:color/black"
         android:textSize="8sp"
         android:layout_marginBottom="8dp"
-        android:text="2.0.0-beta1"/>
+        android:text="2.0.0-beta2"/>
 
 </LinearLayout>
