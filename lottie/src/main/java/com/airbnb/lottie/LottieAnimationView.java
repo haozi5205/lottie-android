@@ -192,7 +192,11 @@ public class LottieAnimationView extends AppCompatImageView {
   }
 
   @VisibleForTesting void recycleBitmaps() {
-    lottieDrawable.recycleBitmaps();
+    // AppCompatImageView constructor will set the image when set from xml
+    // before LottieDrawable has been initialized
+    if (lottieDrawable != null) {
+        lottieDrawable.recycleBitmaps();
+    }
   }
 
   /**
@@ -417,8 +421,10 @@ public class LottieAnimationView extends AppCompatImageView {
 
   void setScale(float scale) {
     lottieDrawable.setScale(scale);
-    setImageDrawable(null);
-    setImageDrawable(lottieDrawable);
+    if (getDrawable() == lottieDrawable) {
+      setImageDrawable(null);
+      setImageDrawable(lottieDrawable);
+    }
   }
 
   public void cancelAnimation() {
