@@ -4,6 +4,7 @@ import android.animation.Animator;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.graphics.ColorFilter;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Parcel;
@@ -70,6 +71,7 @@ public class LottieAnimationView extends AppCompatImageView {
   private String animationName;
   private boolean wasAnimatingWhenDetached = false;
   private boolean autoPlay = false;
+  private boolean useHardwareLayer = false;
 
   @Nullable private Cancellable compositionLoader;
   /**
@@ -133,6 +135,42 @@ public class LottieAnimationView extends AppCompatImageView {
       recycleBitmaps();
     }
     super.setImageDrawable(drawable);
+  }
+
+  /**
+   * Add a color filter to specific content on a specific layer.
+   * @param layerName name of the layer where the supplied content name lives
+   * @param contentName name of the specific content that the color filter is to be applied
+   * @param colorFilter the color filter, null to clear the color filter
+   */
+  @SuppressWarnings("unused") public void addColorFilterToContent(
+      String layerName, String contentName, @Nullable ColorFilter colorFilter) {
+    lottieDrawable.addColorFilterToContent(layerName, contentName, colorFilter);
+  }
+
+  /**
+   * Add a color filter to a whole layer
+   * @param layerName name of the layer that the color filter is to be applied
+   * @param colorFilter the color filter, null to clear the color filter
+   */
+  @SuppressWarnings("unused") public void addColorFilterToLayer(
+      String layerName, @Nullable ColorFilter colorFilter) {
+    lottieDrawable.addColorFilterToLayer(layerName, colorFilter);
+  }
+
+  /**
+   * Add a color filter to all layers
+   * @param colorFilter the color filter, null to clear all color filters
+   */
+  public void addColorFilter(@Nullable ColorFilter colorFilter) {
+    lottieDrawable.addColorFilter(colorFilter);
+  }
+
+  /**
+   * Clear all color filters on all layers and all content in the layers
+   */
+  @SuppressWarnings("unused") public void clearColorFilters() {
+    lottieDrawable.clearColorFilters();
   }
 
   @Override public void invalidateDrawable(@NonNull Drawable dr) {
@@ -212,6 +250,13 @@ public class LottieAnimationView extends AppCompatImageView {
   }
 
   /**
+   * @see #useExperimentalHardwareAcceleration(boolean)
+   */
+  @SuppressWarnings({"WeakerAccess", "unused"}) public void useExperimentalHardwareAcceleration() {
+    useExperimentalHardwareAcceleration(true);
+  }
+
+  /**
    * Enable hardware acceleration for this view.
    * READ THIS BEFORE ENABLING HARDWARE ACCELERATION:
    * 1) Test your animation on the minimum API level you support. Some drawing features such as
@@ -223,8 +268,10 @@ public class LottieAnimationView extends AppCompatImageView {
    *    potentially break hardware rendering with bugs in their SKIA engine. Lottie cannot do
    *    anything about that.
    */
-  @SuppressWarnings({"WeakerAccess", "unused"}) public void useExperimentalHardwareAcceleration() {
-    setLayerType(LAYER_TYPE_HARDWARE, null);
+  @SuppressWarnings({"WeakerAccess", "unused"})
+  public void useExperimentalHardwareAcceleration(boolean use) {
+    useHardwareLayer = use;
+    enableOrDisableHardwareLayer();
   }
 
   /**
@@ -263,8 +310,7 @@ public class LottieAnimationView extends AppCompatImageView {
     cancelLoaderTask();
     compositionLoader = LottieComposition.Factory.fromAssetFileName(getContext(), animationName,
         new OnCompositionLoadedListener() {
-          @Override
-          public void onCompositionLoaded(LottieComposition composition) {
+          @Override public void onCompositionLoaded(LottieComposition composition) {
             if (cacheStrategy == CacheStrategy.Strong) {
               strongRefCache.put(animationName, composition);
             } else if (cacheStrategy == CacheStrategy.Weak) {
@@ -392,18 +438,22 @@ public class LottieAnimationView extends AppCompatImageView {
 
   public void playAnimation() {
     lottieDrawable.playAnimation();
+    enableOrDisableHardwareLayer();
   }
 
   public void resumeAnimation() {
     lottieDrawable.resumeAnimation();
+    enableOrDisableHardwareLayer();
   }
 
   @SuppressWarnings("unused") public void reverseAnimation() {
     lottieDrawable.reverseAnimation();
+    enableOrDisableHardwareLayer();
   }
 
   @SuppressWarnings("unused") public void resumeReverseAnimation() {
     lottieDrawable.resumeReverseAnimation();
+    enableOrDisableHardwareLayer();
   }
 
   @SuppressWarnings("unused") public void setSpeed(float speed) {
@@ -419,7 +469,16 @@ public class LottieAnimationView extends AppCompatImageView {
     lottieDrawable.setImageAssetDelegate(assetDelegate);
   }
 
-  void setScale(float scale) {
+  /**
+   * Set the scale on the current composition. The only cost of this function is re-rendering the
+   * current frame so you may call it frequent to scale something up or down.
+   *
+   * The smaller the animation is, the better the performance will be. You may find that scaling an
+   * animation down then rendering it in a larger ImageView and letting ImageView scale it back up
+   * with a scaleType such as centerInside will yield better performance with little perceivable
+   * quality loss.
+   */
+  public void setScale(float scale) {
     lottieDrawable.setScale(scale);
     if (getDrawable() == lottieDrawable) {
       setImageDrawable(null);
@@ -427,14 +486,20 @@ public class LottieAnimationView extends AppCompatImageView {
     }
   }
 
+  public float getScale() {
+    return lottieDrawable.getScale();
+  }
+
   public void cancelAnimation() {
     lottieDrawable.cancelAnimation();
+    enableOrDisableHardwareLayer();
   }
 
   public void pauseAnimation() {
     float progress = getProgress();
     lottieDrawable.cancelAnimation();
     setProgress(progress);
+    enableOrDisableHardwareLayer();
   }
 
   public void setProgress(@FloatRange(from = 0f, to = 1f) float progress) {
@@ -447,6 +512,11 @@ public class LottieAnimationView extends AppCompatImageView {
 
   @SuppressWarnings("unused") public long getDuration() {
     return composition != null ? composition.getDuration() : 0;
+  }
+
+  private void enableOrDisableHardwareLayer() {
+    boolean useHardwareLayer = this.useHardwareLayer && lottieDrawable.isAnimating();
+    setLayerType(useHardwareLayer ? LAYER_TYPE_HARDWARE : LAYER_TYPE_NONE, null);
   }
 
   private static class SavedState extends BaseSavedState {

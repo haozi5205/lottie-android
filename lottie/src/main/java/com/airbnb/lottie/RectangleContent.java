@@ -11,6 +11,7 @@ class RectangleContent implements PathContent, BaseKeyframeAnimation.AnimationLi
   private final Path path = new Path();
   private final RectF rect = new RectF();
 
+  private final String name;
   private final LottieDrawable lottieDrawable;
   private final BaseKeyframeAnimation<?, PointF> positionAnimation;
   private final BaseKeyframeAnimation<?, PointF> sizeAnimation;
@@ -20,6 +21,7 @@ class RectangleContent implements PathContent, BaseKeyframeAnimation.AnimationLi
   private boolean isPathValid;
 
   RectangleContent(LottieDrawable lottieDrawable, BaseLayer layer, RectangleShape rectShape) {
+    name = rectShape.getName();
     this.lottieDrawable = lottieDrawable;
     positionAnimation = rectShape.getPosition().createAnimation();
     sizeAnimation = rectShape.getSize().createAnimation();
@@ -32,6 +34,10 @@ class RectangleContent implements PathContent, BaseKeyframeAnimation.AnimationLi
     positionAnimation.addUpdateListener(this);
     sizeAnimation.addUpdateListener(this);
     cornerRadiusAnimation.addUpdateListener(this);
+  }
+
+  @Override public String getName() {
+    return name;
   }
 
   @Override public void onValueChanged() {
@@ -95,7 +101,7 @@ class RectangleContent implements PathContent, BaseKeyframeAnimation.AnimationLi
       path.arcTo(rect, 90, 90, false);
     }
 
-    path.lineTo(position.x - halfWidth, position.y - halfHeight + 2 * radius);
+    path.lineTo(position.x - halfWidth, position.y - halfHeight + radius);
 
     if (radius > 0) {
       rect.set(position.x - halfWidth,
@@ -105,7 +111,7 @@ class RectangleContent implements PathContent, BaseKeyframeAnimation.AnimationLi
       path.arcTo(rect, 180, 90, false);
     }
 
-    path.lineTo(position.x + halfWidth - 2 * radius, position.y - halfHeight);
+    path.lineTo(position.x + halfWidth - radius, position.y - halfHeight);
 
     if (radius > 0) {
       rect.set(position.x + halfWidth - 2 * radius,

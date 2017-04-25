@@ -3,6 +3,7 @@ package com.airbnb.lottie;
 import android.graphics.Path;
 import android.support.annotation.Nullable;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 
 class GradientFill {
@@ -13,10 +14,11 @@ class GradientFill {
   private final AnimatableIntegerValue opacity;
   private final AnimatablePointValue startPoint;
   private final AnimatablePointValue endPoint;
+  private final String name;
   @Nullable private final AnimatableFloatValue highlightLength;
   @Nullable private final AnimatableFloatValue highlightAngle;
 
-  private GradientFill(GradientType gradientType, Path.FillType fillType,
+  private GradientFill(String name, GradientType gradientType, Path.FillType fillType,
       AnimatableGradientColorValue gradientColor,
       AnimatableIntegerValue opacity, AnimatablePointValue startPoint,
       AnimatablePointValue endPoint, AnimatableFloatValue highlightLength,
@@ -27,8 +29,13 @@ class GradientFill {
     this.opacity = opacity;
     this.startPoint = startPoint;
     this.endPoint = endPoint;
+    this.name = name;
     this.highlightLength = highlightLength;
     this.highlightAngle = highlightAngle;
+  }
+
+  String getName() {
+    return name;
   }
 
   GradientType getGradientType() {
@@ -68,9 +75,19 @@ class GradientFill {
     }
 
     static GradientFill newInstance(JSONObject json, LottieComposition composition) {
+      final String name = json.optString("nm");
+
       JSONObject jsonColor = json.optJSONObject("g");
       if (jsonColor != null && jsonColor.has("k")) {
+        // This is a hack because the "p" value which contains the number of color points is outside
+        // of "k" which contains the useful data.
+        int points = jsonColor.optInt("p");
         jsonColor = jsonColor.optJSONObject("k");
+        try {
+          jsonColor.put("p", points);
+        } catch (JSONException e) {
+          // Do nothing. This shouldn't fail.
+        }
       }
       AnimatableGradientColorValue color = null;
       if (jsonColor != null) {
@@ -86,7 +103,7 @@ class GradientFill {
       int fillTypeInt = json.optInt("r", 1);
       Path.FillType fillType = fillTypeInt == 1 ? Path.FillType.WINDING : Path.FillType.EVEN_ODD;
 
-      int gradientTypeInt = json.optInt("r", 1);
+      int gradientTypeInt = json.optInt("t", 1);
       GradientType gradientType = gradientTypeInt == 1 ? GradientType.Linear : GradientType.Radial;
 
       JSONObject jsonStartPoint = json.optJSONObject("s");
@@ -101,8 +118,8 @@ class GradientFill {
         endPoint = AnimatablePointValue.Factory.newInstance(jsonEndPoint, composition);
       }
 
-      return new GradientFill(
-          gradientType, fillType, color, opacity, startPoint, endPoint, null, null);
+      return new GradientFill(name, gradientType, fillType, color, opacity, startPoint, endPoint,
+          null, null);
     }
   }
 }

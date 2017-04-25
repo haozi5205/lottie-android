@@ -42,17 +42,9 @@ You can build the sample app yourself or download it from the [Play Store](https
 
 Gradle is the only supported build configuration, so just add the dependency to your project `build.gradle` file:
 
-### Release
 ```groovy
 dependencies {  
-  compile 'com.airbnb.android:lottie:1.5.3'
-}
-```
-
-### Beta
-```groovy
-dependencies {  
-  compile 'com.airbnb.android:lottie:2.0.0-beta2'
+  compile 'com.airbnb.android:lottie:2.0.0-beta4'
 }
 ```
 
@@ -121,6 +113,24 @@ animator.start();
 animationView.cancelAnimation();
 ```
 
+You can add a color filter to the whole animation, a specific layer, or specific content within a layer:
+```java
+// Any class that conforms to the ColorFilter interface
+final PorterDuffColorFilter colorFilter = new PorterDuffColorFilter(Color.RED, PorterDuff.Mode.LIGHTEN);
+
+// Adding a color filter to the whole view
+animationView.addColorFilter(colorFilter);
+
+// Adding a color filter to a specific layer
+animationView.addColorFilterToLayer("hello_layer", colorFilter);
+
+// Adding a color filter to specfic content on the "hello_layer"
+animationView.addColorFilterToContent("hello_layer", "hello", colorFilter);
+
+// Clear all color filters
+animationView.clearColorFilters();
+```
+Note: Color filters are only available for layers such as Image layer and Solid layer as well as content that includes fill, stroke, or group content.
 
 Under the hood, `LottieAnimationView` uses `LottieDrawable` to render its animations. If you need to, you can use the drawable form directly:
 ```java

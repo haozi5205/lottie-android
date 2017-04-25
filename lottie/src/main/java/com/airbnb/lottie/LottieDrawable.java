@@ -18,6 +18,9 @@ import android.util.Log;
 import android.view.View;
 import android.view.animation.LinearInterpolator;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * This can be used to show an lottie animation in any place that would normally take a drawable.
  * If there are masks or mattes, then you MUST call {@link #recycleBitmaps()} when you are done
@@ -36,6 +39,7 @@ public class LottieDrawable extends Drawable implements Drawable.Callback {
   private float scale = 1f;
   private float progress = 0f;
 
+  private final Set<ColorFilterData> colorFilterData = new HashSet<>();
   @Nullable private ImageAssetBitmapManager imageAssetBitmapManager;
   @Nullable private String imageAssetsFolder;
   @Nullable private ImageAssetDelegate imageAssetDelegate;
@@ -149,6 +153,7 @@ public class LottieDrawable extends Drawable implements Drawable.Callback {
     setScale(1f);
     updateBounds();
     buildCompositionLayer();
+    applyColorFilters();
 
     setProgress(progress);
     if (playAnimationWhenCompositionAdded) {
@@ -166,6 +171,16 @@ public class LottieDrawable extends Drawable implements Drawable.Callback {
   private void buildCompositionLayer() {
     compositionLayer = new CompositionLayer(
         this, Layer.Factory.newInstance(composition), composition.getLayers(), composition);
+  }
+
+  private void applyColorFilters() {
+    if (compositionLayer == null) {
+      return;
+    }
+
+    for (ColorFilterData data : colorFilterData) {
+      compositionLayer.addColorFilter(data.layerName, data.contentName, data.colorFilter);
+    }
   }
 
   private void clearComposition() {
@@ -192,6 +207,67 @@ public class LottieDrawable extends Drawable implements Drawable.Callback {
 
   @Override public void setColorFilter(@Nullable ColorFilter colorFilter) {
     // Do nothing.
+  }
+
+  /**
+   * Add a color filter to specific content on a specific layer.
+   * @param layerName name of the layer where the supplied content name lives
+   * @param contentName name of the specific content that the color filter is to be applied
+   * @param colorFilter the color filter, null to clear the color filter
+   */
+  public void addColorFilterToContent(String layerName, String contentName,
+      @Nullable ColorFilter colorFilter) {
+    addColorFilterInternal(layerName, contentName, colorFilter);
+  }
+
+  /**
+   * Add a color filter to a whole layer
+   * @param layerName name of the layer that the color filter is to be applied
+   * @param colorFilter the color filter, null to clear the color filter
+   */
+  public void addColorFilterToLayer(String layerName, @Nullable ColorFilter colorFilter) {
+    addColorFilterInternal(layerName, null, colorFilter);
+  }
+
+  /**
+   * Add a color filter to all layers
+   * @param colorFilter the color filter, null to clear all color filters
+   */
+  public void addColorFilter(ColorFilter colorFilter) {
+    addColorFilterInternal(null, null, colorFilter);
+  }
+
+  /**
+   * Clear all color filters on all layers and all content in the layers
+   */
+  public void clearColorFilters() {
+    colorFilterData.clear();
+    addColorFilterInternal(null, null, null);
+  }
+
+  /**
+   * Private method to capture all color filter additions.
+   * There are 3 different behaviors here.
+   * 1. layerName is null. All layers supporting color filters will apply the passed in color filter
+   * 2. layerName is not null, contentName is null. This will apply the passed in color filter
+   *    to the whole layer
+   * 3. layerName is not null, contentName is not null. This will apply the pass in color filter
+   *    to a specific composition content.
+   */
+  private void addColorFilterInternal(@Nullable String layerName, @Nullable String contentName,
+      @Nullable ColorFilter colorFilter) {
+    final ColorFilterData data = new ColorFilterData(layerName, contentName, colorFilter);
+    if (colorFilter == null && colorFilterData.contains(data)) {
+      colorFilterData.remove(data);
+    } else {
+      colorFilterData.add(new ColorFilterData(layerName, contentName, colorFilter));
+    }
+
+    if (compositionLayer == null) {
+      return;
+    }
+
+    compositionLayer.addColorFilter(layerName, contentName, colorFilter);
   }
 
   @Override public int getOpacity() {
@@ -224,7 +300,7 @@ public class LottieDrawable extends Drawable implements Drawable.Callback {
   }
 
   @SuppressWarnings("WeakerAccess") public void playAnimation() {
-    playAnimation(false);
+    playAnimation((progress > 0.0 && progress < 1.0));
   }
 
   @SuppressWarnings("WeakerAccess") public void resumeAnimation() {
@@ -248,7 +324,7 @@ public class LottieDrawable extends Drawable implements Drawable.Callback {
   }
 
   @SuppressWarnings("WeakerAccess") public void reverseAnimation() {
-    reverseAnimation(false);
+    reverseAnimation((progress > 0.0 && progress < 1.0));
   }
 
   private void reverseAnimation(boolean setStartTime) {
@@ -287,6 +363,15 @@ public class LottieDrawable extends Drawable implements Drawable.Callback {
     return progress;
   }
 
+  /**
+   * Set the scale on the current composition. The only cost of this function is re-rendering the
+   * current frame so you may call it frequent to scale something up or down.
+   *
+   * The smaller the animation is, the better the performance will be. You may find that scaling an
+   * animation down then rendering it in a larger ImageView and letting ImageView scale it back up
+   * with a scaleType such as centerInside will yield better performance with little perceivable
+   * quality loss.
+   */
   @SuppressWarnings("WeakerAccess") public void setScale(float scale) {
     this.scale = scale;
     updateBounds();
@@ -408,5 +493,53 @@ public class LottieDrawable extends Drawable implements Drawable.Callback {
       return;
     }
     callback.unscheduleDrawable(this, what);
+  }
+
+  private static class ColorFilterData {
+
+    final String layerName;
+    @Nullable final String contentName;
+    @Nullable final ColorFilter colorFilter;
+
+    ColorFilterData(@Nullable String layerName, @Nullable String contentName,
+        @Nullable ColorFilter colorFilter) {
+      this.layerName = layerName;
+      this.contentName = contentName;
+      this.colorFilter = colorFilter;
+    }
+
+    @Override public int hashCode() {
+      int hashCode = 17;
+      if (layerName != null) {
+        hashCode = hashCode * 31 * layerName.hashCode();
+      }
+
+      if (contentName != null) {
+        hashCode = hashCode * 31 * contentName.hashCode();
+      }
+      return hashCode;
+    }
+
+    @Override public boolean equals(Object obj) {
+      if (this == obj) {
+        return true;
+      }
+
+      if (!(obj instanceof ColorFilterData)) {
+        return false;
+      }
+
+      final ColorFilterData other = (ColorFilterData) obj;
+
+      if (hashCode() != other.hashCode()) {
+        return false;
+      }
+
+      if (colorFilter != other.colorFilter) {
+        return false;
+      }
+
+      return true;
+    }
   }
 }

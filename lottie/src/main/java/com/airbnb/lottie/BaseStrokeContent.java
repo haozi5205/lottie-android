@@ -104,7 +104,9 @@ abstract class BaseStrokeContent implements DrawingContent, BaseKeyframeAnimatio
         currentPathGroup.paths.add((PathContent) content);
       }
     }
-    pathGroups.add(currentPathGroup);
+    if (currentPathGroup != null) {
+      pathGroups.add(currentPathGroup);
+    }
   }
 
   @Override public void draw(Canvas canvas, Matrix parentMatrix, int parentAlpha) {
@@ -115,7 +117,7 @@ abstract class BaseStrokeContent implements DrawingContent, BaseKeyframeAnimatio
       // Android draws a hairline stroke for 0, After Effects doesn't.
       return;
     }
-    applyDashPatternIfNeeded();
+    applyDashPatternIfNeeded(parentMatrix);
 
     for (int i = 0; i < pathGroups.size(); i++) {
       PathGroup pathGroup = pathGroups.get(i);
@@ -171,7 +173,8 @@ abstract class BaseStrokeContent implements DrawingContent, BaseKeyframeAnimatio
         float endValue = Math.min((endLength - totalLength) / length, 1);
         Utils.applyTrimPathIfNeeded(trimPathPath, startValue, endValue, 0);
         canvas.drawPath(trimPathPath, paint);
-      } else //noinspection StatementWithEmptyBody
+      } else
+        //noinspection StatementWithEmptyBody
         if (currentLength + length < startLength || currentLength > endLength) {
           // Do nothing
         } else if (currentLength + length <= endLength && startLength < currentLength) {
@@ -201,7 +204,7 @@ abstract class BaseStrokeContent implements DrawingContent, BaseKeyframeAnimatio
     for (int i = 0; i < pathGroups.size(); i++) {
       PathGroup pathGroup = pathGroups.get(i);
       for (int j = 0; j < pathGroup.paths.size(); j++) {
-        path.addPath(pathGroup.paths.get(i).getPath(), parentMatrix);
+        path.addPath(pathGroup.paths.get(j).getPath(), parentMatrix);
       }
     }
     path.computeBounds(rect, false);
@@ -219,12 +222,12 @@ abstract class BaseStrokeContent implements DrawingContent, BaseKeyframeAnimatio
     );
   }
 
-  private void applyDashPatternIfNeeded() {
+  private void applyDashPatternIfNeeded(Matrix parentMatrix) {
     if (dashPatternAnimations.isEmpty()) {
       return;
     }
 
-    float scale = lottieDrawable.getScale();
+    float scale = Utils.getScale(parentMatrix);
     for (int i = 0; i < dashPatternAnimations.size(); i++) {
       dashPatternValues[i] = dashPatternAnimations.get(i).getValue();
       // If the value of the dash pattern or gap is too small, the number of individual sections

@@ -25,7 +25,7 @@ final class Utils {
     Path path = new Path();
     path.moveTo(startPoint.x, startPoint.y);
 
-    if (cp1 != null && cp1.length() != 0 && cp2 != null && cp2.length() != 0) {
+    if (cp1 != null  && cp2 != null && (cp1.length() != 0 || cp2.length() != 0)) { // This Line
       path.cubicTo(
           startPoint.x + cp1.x, startPoint.y + cp1.y,
           endPoint.x + cp2.x, endPoint.y + cp2.y,
@@ -89,13 +89,12 @@ final class Utils {
 
   static void applyTrimPathIfNeeded(
       Path path, float startValue, float endValue, float offsetValue) {
-    if (startValue == endValue) {
-      path.reset();
-    }
-
     pathMeasure.setPath(path, false);
 
     float length = pathMeasure.getLength();
+    if (length == 0f || Math.abs(endValue - startValue - 1) < .01) {
+      return;
+    }
     float start = length * startValue;
     float end = length * endValue;
     float newStart = Math.min(start, end);
@@ -106,11 +105,25 @@ final class Utils {
     newEnd += offset;
 
     // If the trim path has rotated around the path, we need to shift it back.
-    if (newStart > length && newEnd > length) {
-      newStart %= length;
-      newEnd %= length;
+    if (newStart >= length && newEnd >= length) {
+      newStart = MiscUtils.floorMod(newStart, length);
+      newEnd = MiscUtils.floorMod(newEnd, length);
     }
-    if (newStart > newEnd) {
+
+    if (newStart < 0) {
+      newStart = MiscUtils.floorMod(newStart, length);
+    }
+    if (newEnd < 0) {
+      newEnd = MiscUtils.floorMod(newEnd, length);
+    }
+
+    // If the start and end are equals, return an empty path.
+    if (newStart == newEnd) {
+      path.reset();
+      return;
+    }
+
+    if (newStart >= newEnd) {
       newStart -= length;
     }
 
