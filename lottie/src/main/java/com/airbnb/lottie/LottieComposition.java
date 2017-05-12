@@ -129,7 +129,8 @@ public class LottieComposition {
       return loader;
     }
 
-    static LottieComposition fromFileSync(Context context, String fileName) {
+    @SuppressWarnings("WeakerAccess")
+    public static LottieComposition fromFileSync(Context context, String fileName) {
       InputStream stream;
       try {
         stream = context.getAssets().open(fileName);
@@ -197,6 +198,13 @@ public class LottieComposition {
 
     private static void parseLayers(JSONObject json, LottieComposition composition) {
       JSONArray jsonLayers = json.optJSONArray("layers");
+      // This should never be null. Bodymovin always exports at least an empty array.
+      // However, it seems as if the demarshalling from the React Native library sometimes
+      // causes this to be null. The proper fix should be done there but this will prevent a crash.
+      // https://github.com/airbnb/lottie-android/issues/279
+      if (jsonLayers == null) {
+        return;
+      }
       int length = jsonLayers.length();
       for (int i = 0; i < length; i++) {
         Layer layer = Layer.Factory.newInstance(jsonLayers.optJSONObject(i), composition);

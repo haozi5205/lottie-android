@@ -119,7 +119,6 @@ public class LottieAnimationView extends AppCompatImageView {
           R.styleable.LottieAnimationView_lottie_colorFilter, Color.TRANSPARENT)));
     }
     ta.recycle();
-    setLayerType(LAYER_TYPE_SOFTWARE, null);
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
     float systemAnimationScale = Settings.Global.getFloat(getContext().getContentResolver(),
@@ -128,6 +127,8 @@ public class LottieAnimationView extends AppCompatImageView {
         lottieDrawable.systemAnimationsAreDisabled();
       }
     }
+
+    enableOrDisableHardwareLayer();
   }
 
   @Override public void setImageResource(int resId) {
@@ -196,6 +197,7 @@ public class LottieAnimationView extends AppCompatImageView {
     ss.progress = lottieDrawable.getProgress();
     ss.isAnimating = lottieDrawable.isAnimating();
     ss.isLooping = lottieDrawable.isLooping();
+    ss.imageAssetsFolder = lottieDrawable.getImageAssetsFolder();
     return ss;
   }
 
@@ -216,6 +218,7 @@ public class LottieAnimationView extends AppCompatImageView {
     if (ss.isAnimating) {
       playAnimation();
     }
+    lottieDrawable.setImagesAssetsFolder(ss.imageAssetsFolder);
   }
 
   @Override protected void onAttachedToWindow() {
@@ -521,7 +524,7 @@ public class LottieAnimationView extends AppCompatImageView {
 
   private void enableOrDisableHardwareLayer() {
     boolean useHardwareLayer = this.useHardwareLayer && lottieDrawable.isAnimating();
-    setLayerType(useHardwareLayer ? LAYER_TYPE_HARDWARE : LAYER_TYPE_NONE, null);
+    setLayerType(useHardwareLayer ? LAYER_TYPE_HARDWARE : LAYER_TYPE_SOFTWARE, null);
   }
 
   private static class SavedState extends BaseSavedState {
@@ -529,6 +532,7 @@ public class LottieAnimationView extends AppCompatImageView {
     float progress;
     boolean isAnimating;
     boolean isLooping;
+    String imageAssetsFolder;
 
     SavedState(Parcelable superState) {
       super(superState);
@@ -540,6 +544,7 @@ public class LottieAnimationView extends AppCompatImageView {
       progress = in.readFloat();
       isAnimating = in.readInt() == 1;
       isLooping = in.readInt() == 1;
+      imageAssetsFolder = in.readString();
     }
 
     @Override
@@ -549,7 +554,7 @@ public class LottieAnimationView extends AppCompatImageView {
       out.writeFloat(progress);
       out.writeInt(isAnimating ? 1 : 0);
       out.writeInt(isLooping ? 1 : 0);
-
+      out.writeString(imageAssetsFolder);
     }
 
     public static final Parcelable.Creator<SavedState> CREATOR =

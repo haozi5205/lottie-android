@@ -44,7 +44,7 @@ Gradle is the only supported build configuration, so just add the dependency to 
 
 ```groovy
 dependencies {  
-  compile 'com.airbnb.android:lottie:2.0.0-beta4'
+  compile 'com.airbnb.android:lottie:2.0.0-rc1'
 }
 ```
 
@@ -280,6 +280,8 @@ animationView.setImageAssetDelegate(new ImageAssetDelegate() {
 * Fill Color
 
 * Fill Opacity
+
+* Fill Rule
 
 #### Trim Paths (shape layer)
 

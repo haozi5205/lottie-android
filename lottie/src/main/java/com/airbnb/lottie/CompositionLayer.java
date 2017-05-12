@@ -3,7 +3,9 @@ package com.airbnb.lottie;
 import android.graphics.Canvas;
 import android.graphics.ColorFilter;
 import android.graphics.Matrix;
+import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Region;
 import android.support.annotation.FloatRange;
 import android.support.annotation.Nullable;
 import android.support.v4.util.LongSparseArray;
@@ -14,6 +16,11 @@ import java.util.List;
 class CompositionLayer extends BaseLayer {
   private final List<BaseLayer> layers = new ArrayList<>();
   private final RectF rect = new RectF();
+  private final Rect originalClipRect = new Rect();
+  private final RectF newClipRect = new RectF();
+
+  @Nullable private Boolean hasMatte;
+  @Nullable private Boolean hasMasks;
 
   CompositionLayer(LottieDrawable lottieDrawable, Layer layerModel, List<Layer> layerModels,
       LottieComposition composition) {
@@ -55,8 +62,21 @@ class CompositionLayer extends BaseLayer {
   }
 
   @Override void drawLayer(Canvas canvas, Matrix parentMatrix, int parentAlpha) {
+    canvas.getClipBounds(originalClipRect);
+    newClipRect.set(0, 0, layerModel.getPreCompWidth(), layerModel.getPreCompHeight());
+    parentMatrix.mapRect(newClipRect);
+
     for (int i = layers.size() - 1; i >= 0 ; i--) {
-      layers.get(i).draw(canvas, parentMatrix, parentAlpha);
+      boolean nonEmptyClip = true;
+      if (!newClipRect.isEmpty()) {
+        nonEmptyClip = canvas.clipRect(newClipRect);
+      }
+      if (nonEmptyClip) {
+        layers.get(i).draw(canvas, parentMatrix, parentAlpha);
+      }
+    }
+    if (!originalClipRect.isEmpty()) {
+      canvas.clipRect(originalClipRect, Region.Op.REPLACE);
     }
   }
 
@@ -88,28 +108,37 @@ class CompositionLayer extends BaseLayer {
   }
 
   boolean hasMasks() {
-    for (int i = layers.size() - 1; i >= 0; i--) {
-      BaseLayer layer = layers.get(i);
-      if (layer instanceof ShapeLayer) {
-        if (layer.hasMasksOnThisLayer()) {
-          return true;
+    if (hasMasks == null) {
+      for (int i = layers.size() - 1; i >= 0; i--) {
+        BaseLayer layer = layers.get(i);
+        if (layer instanceof ShapeLayer) {
+          if (layer.hasMasksOnThisLayer()) {
+            hasMasks = true;
+            return true;
+          }
         }
       }
+      hasMasks = false;
     }
-    return false;
+    return hasMasks;
   }
 
   boolean hasMatte() {
-    if (hasMatteOnThisLayer()) {
-      return true;
-    }
-
-    for (int i = layers.size() - 1; i >= 0; i--) {
-      if (layers.get(i).hasMatteOnThisLayer()) {
+    if (hasMatte == null) {
+      if (hasMatteOnThisLayer()) {
+        hasMatte = true;
         return true;
       }
+
+      for (int i = layers.size() - 1; i >= 0; i--) {
+        if (layers.get(i).hasMatteOnThisLayer()) {
+          hasMatte = true;
+          return true;
+        }
+      }
+      hasMatte = false;
     }
-    return false;
+    return hasMatte;
   }
 
   @Override public void addColorFilter(@Nullable String layerName, @Nullable String contentName,
